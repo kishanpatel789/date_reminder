@@ -9,7 +9,6 @@ import io
 from urllib.parse import urlparse
 import csv
 
-import pandas as pd
 from jinja2 import Environment, FileSystemLoader
 import boto3, botocore
 
@@ -20,7 +19,7 @@ def generate_message(row):
     else:
         display_name = row["display_name"]
 
-    return f"Happy {row['type']}, {display_name}! \U0001f389 \nI hope you have a great day! \U0001f600"
+    return f"Happy {row['type'].lower()}, {display_name}! \U0001f389 \nI hope you have a great day! \U0001f600"
 
 
 def main():
@@ -36,6 +35,7 @@ def main():
     today = datetime.today()
 
     # load data file
+    buffer = io.BytesIO()
     if in_prod_env:
         parsed_url = urlparse(s3_file_path)
         bucket_name = parsed_url.netloc
@@ -43,52 +43,27 @@ def main():
         logger.info(f"Attempting to use file '{object_key}' in bucket '{bucket_name}'")
 
         try:
-            buffer = io.BytesIO()
             s3 = boto3.client("s3")
             s3.download_fileobj(bucket_name, object_key, buffer)
             buffer.seek(0)
         except botocore.exceptions.ClientError:
             logger.error(f"Failed to download file '{object_key}'")
             raise
-
-        # data_source = buffer
     else:
-        data_source = Path(__file__).parents[1] / "data/dates.csv"
+        local_file_path = Path(__file__).parents[1] / "data/dates.csv"
+        with open(local_file_path, "rb") as f:
+            buffer.write(f.read())
+            buffer.seek(0)
 
-    today_events = [] # list of dictionaries
-    with open(data_source, newline='\n') as csvfile:
-        reader = csv.DictReader(csvfile)
-        for row in reader:
-            # logger.debug(row)
-            # check for current month-day
-            row["date"] = datetime.strptime(row["date"], "%Y-%m-%d")
-            if row["date"].month == today.month and row["date"].day == today.day:
-                row["message"] = generate_message(row)
-                today_events.append(row)
-    logger.debug(today_events)
-
-    # process records
-    # sort by type, date
+    reader = csv.DictReader(io.TextIOWrapper(buffer, encoding="utf-8"))
+    today_events = []  # list of dictionaries
+    for row in reader:
+        # capture today's events
+        row["date"] = datetime.strptime(row["date"], "%Y-%m-%d")
+        if row["date"].month == today.month and row["date"].day == today.day:
+            row["message"] = generate_message(row)
+            today_events.append(row)
     today_events.sort(key=lambda x: (x["type"], x["date"]))
-
-    # df = pd.read_csv(
-    #     data_source,
-    #     dtype={"display_name": pd.StringDtype(storage="pyarrow")},
-    #     parse_dates=["date"],
-    # )
-
-    # # filter data for current month-day
-    # mask = (df["date"].dt.month == today.month) & (df["date"].dt.day == today.day)
-    # df_filtered = df[mask].copy()
-
-    # # if records exist, process them
-    # if df_filtered.empty:
-    #     logger.info("No matching records found")
-    #     return
-
-    # # generate message
-    # df_filtered["message"] = df.apply(generate_message, axis=1)
-    # df_filtered.sort_values(["type", "date"], inplace=True)
 
     # generate email content
     env = Environment(
@@ -111,29 +86,29 @@ def main():
 
     logger.debug(output_txt)
 
-    # # generate email
-    # subject = f"Date Reminder - {today.strftime('%m/%d')}"
+    # generate email
+    subject = f"Date Reminder - {today.strftime('%m/%d')}"
 
-    # message = MIMEMultipart("alternative")
-    # message["From"] = sender
-    # message["To"] = recipient
-    # message["Subject"] = subject
+    message = MIMEMultipart("alternative")
+    message["From"] = sender
+    message["To"] = recipient
+    message["Subject"] = subject
 
-    # message.attach(MIMEText(output_txt, "plain"))
-    # message.attach(MIMEText(output_html, "html"))
+    message.attach(MIMEText(output_txt, "plain"))
+    message.attach(MIMEText(output_html, "html"))
 
-    # # send email
-    # ses = boto3.client("sesv2")
-    # response = ses.send_email(Content={"Raw": {"Data": message.as_bytes()}})
+    # send email
+    ses = boto3.client("sesv2")
+    response = ses.send_email(Content={"Raw": {"Data": message.as_bytes()}})
 
-    # logger.info(response)
+    logger.info(response)
 
-    # return {
-    #     "statusCode": 200,
-    #     "body": json.dumps(
-    #         f"Email sent successfully. MessageId is: {response['MessageId']}"
-    #     ),
-    # }
+    return {
+        "statusCode": 200,
+        "body": json.dumps(
+            f"Email sent successfully. MessageId is: {response['MessageId']}"
+        ),
+    }
 
 
 if __name__ == "__main__":

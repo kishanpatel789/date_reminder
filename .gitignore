@@ -2,8 +2,9 @@ notes.md
 *.swp
 venv
 .python-version
-data
+data/
 .env
-out*
+out/
 scratch.txt
 *.zip
+.vscode/
