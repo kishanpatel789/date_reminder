@@ -1,4 +1,4 @@
-{% for index, row in reminders.iterrows() %}
+{% for row in reminders %}
 {{ row['person_id'] }} - {{ row['type'] }}
 {{ row['message'] }}
 

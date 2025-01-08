@@ -6,3 +6,4 @@ data
 .env
 out*
 scratch.txt
+*.zip

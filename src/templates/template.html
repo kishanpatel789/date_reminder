@@ -5,7 +5,7 @@
         </style>
     </head>
     <body>
-        {% for index, row in reminders.iterrows() %}
+        {% for row in reminders %}
         <h1>{{ row['person_id'] }} - {{ row['type'] }}</h1>
         <p>{{ row['message'] | replace ('\n', '<br>')}}</p><br>
         {% endfor %}

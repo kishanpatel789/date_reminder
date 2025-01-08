@@ -7,6 +7,7 @@ from email.mime.text import MIMEText
 import json
 import io
 from urllib.parse import urlparse
+import csv
 
 import pandas as pd
 from jinja2 import Environment, FileSystemLoader
@@ -14,7 +15,7 @@ import boto3, botocore
 
 
 def generate_message(row):
-    if pd.isna(row["display_name"]):
+    if row["display_name"] == "":
         display_name = row["person_id"].split(".")[0]
     else:
         display_name = row["display_name"]
@@ -50,28 +51,44 @@ def main():
             logger.error(f"Failed to download file '{object_key}'")
             raise
 
-        data_source = buffer
+        # data_source = buffer
     else:
         data_source = Path(__file__).parents[1] / "data/dates.csv"
 
-    df = pd.read_csv(
-        data_source,
-        dtype={"display_name": pd.StringDtype(storage="pyarrow")},
-        parse_dates=["date"],
-    )
+    today_events = [] # list of dictionaries
+    with open(data_source, newline='\n') as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            # logger.debug(row)
+            # check for current month-day
+            row["date"] = datetime.strptime(row["date"], "%Y-%m-%d")
+            if row["date"].month == today.month and row["date"].day == today.day:
+                row["message"] = generate_message(row)
+                today_events.append(row)
+    logger.debug(today_events)
 
-    # filter data for current month-day
-    mask = (df["date"].dt.month == today.month) & (df["date"].dt.day == today.day)
-    df_filtered = df[mask].copy()
+    # process records
+    # sort by type, date
+    today_events.sort(key=lambda x: (x["type"], x["date"]))
 
-    # if records exist, process them
-    if df_filtered.empty:
-        logger.info("No matching records found")
-        return
+    # df = pd.read_csv(
+    #     data_source,
+    #     dtype={"display_name": pd.StringDtype(storage="pyarrow")},
+    #     parse_dates=["date"],
+    # )
 
-    # generate message
-    df_filtered["message"] = df.apply(generate_message, axis=1)
-    df_filtered.sort_values(["type", "date"], inplace=True)
+    # # filter data for current month-day
+    # mask = (df["date"].dt.month == today.month) & (df["date"].dt.day == today.day)
+    # df_filtered = df[mask].copy()
+
+    # # if records exist, process them
+    # if df_filtered.empty:
+    #     logger.info("No matching records found")
+    #     return
+
+    # # generate message
+    # df_filtered["message"] = df.apply(generate_message, axis=1)
+    # df_filtered.sort_values(["type", "date"], inplace=True)
 
     # generate email content
     env = Environment(
@@ -82,8 +99,8 @@ def main():
     template_txt = env.get_template("template.txt")
     template_html = env.get_template("template.html")
 
-    output_txt = template_txt.render(reminders=df_filtered)
-    output_html = template_html.render(reminders=df_filtered)
+    output_txt = template_txt.render(reminders=today_events)
+    output_html = template_html.render(reminders=today_events)
 
     if not in_prod_env:
         output_path = Path(__file__).parents[1] / "out"
@@ -94,29 +111,29 @@ def main():
 
     logger.debug(output_txt)
 
-    # generate email
-    subject = f"Date Reminder - {today.strftime('%m/%d')}"
+    # # generate email
+    # subject = f"Date Reminder - {today.strftime('%m/%d')}"
 
-    message = MIMEMultipart("alternative")
-    message["From"] = sender
-    message["To"] = recipient
-    message["Subject"] = subject
+    # message = MIMEMultipart("alternative")
+    # message["From"] = sender
+    # message["To"] = recipient
+    # message["Subject"] = subject
 
-    message.attach(MIMEText(output_txt, "plain"))
-    message.attach(MIMEText(output_html, "html"))
+    # message.attach(MIMEText(output_txt, "plain"))
+    # message.attach(MIMEText(output_html, "html"))
 
-    # send email
-    ses = boto3.client("sesv2")
-    response = ses.send_email(Content={"Raw": {"Data": message.as_bytes()}})
+    # # send email
+    # ses = boto3.client("sesv2")
+    # response = ses.send_email(Content={"Raw": {"Data": message.as_bytes()}})
 
-    logger.info(response)
+    # logger.info(response)
 
-    return {
-        "statusCode": 200,
-        "body": json.dumps(
-            f"Email sent successfully. MessageId is: {response['MessageId']}"
-        ),
-    }
+    # return {
+    #     "statusCode": 200,
+    #     "body": json.dumps(
+    #         f"Email sent successfully. MessageId is: {response['MessageId']}"
+    #     ),
+    # }
 
 
 if __name__ == "__main__":
