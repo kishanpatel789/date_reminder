@@ -1,0 +1,13 @@
+<html>
+    <head>
+        <style>
+            
+        </style>
+    </head>
+    <body>
+        {% for index, row in reminders.iterrows() %}
+        <h1>{{ row['person_id'] }} - {{ row['type'] }}</h1>
+        <p>{{ row['message'] | replace ('\n', '<br>')}}</p><br>
+        {% endfor %}
+    </body>
+</html>

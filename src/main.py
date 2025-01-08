@@ -1,10 +1,14 @@
-import pandas as pd
 from datetime import datetime
 from pathlib import Path
 import logging
+import os
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+import json
 
+import pandas as pd
 from jinja2 import Environment, FileSystemLoader
-
+import boto3
 
 
 def generate_message(row):
@@ -13,22 +17,30 @@ def generate_message(row):
     else:
         display_name = row["display_name"]
 
-    return f"Happy {row['type']}, {display_name}! I hope you have a great day!"
+    return f"Happy {row['type']}, {display_name}! \U0001f389 \nI hope you have a great day! \U0001f600"
 
 
 def main():
+
+    # read environment vars
+    sender = os.environ["DR_SENDER"]
+    recipient = os.environ["DR_RECIPIENT"]
+    in_prod_env = bool(int(os.environ.get("DR_PROD", "0")))
 
     # get current date
     today = datetime.today()
 
     # load data file
+    if in_prod_env:
+        # TODO: download file from s3
+        pass
+    else:
+        data_path = Path(__file__).parents[1] / "data/dates.csv"
     df = pd.read_csv(
-        "../data/dates.csv",
+        data_path,
         dtype={"display_name": pd.StringDtype(storage="pyarrow")},
         parse_dates=["date"],
     )
-    # logger.debug(df)
-    # logger.debug(df.dtypes)
 
     # filter data for current month-day
     mask = (df["date"].dt.month == today.month) & (df["date"].dt.day == today.day)
@@ -41,23 +53,52 @@ def main():
 
     # generate message
     df_filtered["message"] = df.apply(generate_message, axis=1)
-    df_filtered.sort_values("type", inplace=True)
+    df_filtered.sort_values(["type", "date"], inplace=True)
 
     # generate email content
     env = Environment(
-        loader=FileSystemLoader('./templates'),
+        loader=FileSystemLoader(Path(__file__).parent / "templates"),
         trim_blocks=True,
         lstrip_blocks=True,
     )
-    template_txt = env.get_template('template.txt')
-    template_html = env.get_template('template.html')
+    template_txt = env.get_template("template.txt")
+    template_html = env.get_template("template.html")
 
     output_txt = template_txt.render(reminders=df_filtered)
+    output_html = template_html.render(reminders=df_filtered)
 
+    if not in_prod_env:
+        output_path = Path(__file__).parents[1] / "out"
+        with open(output_path / "out.txt", "w") as f:
+            f.write(output_txt)
+        with open(output_path / "out.html", "w") as f:
+            f.write(output_html)
 
     logger.debug(output_txt)
 
-    # 
+    # generate email
+    subject = f"Date Reminder - {today.strftime('%m/%d')}"
+
+    message = MIMEMultipart("alternative")
+    message["From"] = sender
+    message["To"] = recipient
+    message["Subject"] = subject
+
+    message.attach(MIMEText(output_txt, "plain"))
+    message.attach(MIMEText(output_html, "html"))
+
+    # send email
+    ses = boto3.client("sesv2")
+    response = ses.send_email(Content={"Raw": {"Data": message.as_bytes()}})
+
+    logger.info(response)
+
+    return {
+        "statusCode": 200,
+        "body": json.dumps(
+            f"Email sent successfully. MessageId is: {response['MessageId']}"
+        ),
+    }
 
 
 if __name__ == "__main__":

@@ -3,3 +3,5 @@ notes.md
 venv
 .python-version
 data
+.env
+out*
