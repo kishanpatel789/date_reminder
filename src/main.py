@@ -22,7 +22,25 @@ def generate_message(row):
     return f"Happy {row['type'].lower()}, {display_name}! \U0001f389 \nI hope you have a great day! \U0001f600"
 
 
-def main():
+def get_logger(in_prod_env):
+    if not in_prod_env:
+        logger = logging.getLogger(__name__)
+        logger.setLevel(logging.DEBUG)
+
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+    else:
+        logger = logging.getLogger()
+        logger.setLevel(logging.INFO)
+
+    return logger
+
+
+def main(*args):
 
     # read environment vars
     sender = os.environ["DR_SENDER"]
@@ -30,6 +48,7 @@ def main():
     in_prod_env = bool(int(os.environ.get("DR_PROD", "0")))
     if in_prod_env:
         s3_file_path = os.environ["DR_S3_PATH"]
+    logger = get_logger(in_prod_env)
 
     # get current date
     today = datetime.today()
@@ -112,14 +131,14 @@ def main():
 
 
 if __name__ == "__main__":
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.DEBUG)
+    # logger = logging.getLogger(__name__)
+    # logger.setLevel(logging.DEBUG)
 
-    handler = logging.StreamHandler()
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
+    # handler = logging.StreamHandler()
+    # formatter = logging.Formatter(
+    #     "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    # )
+    # handler.setFormatter(formatter)
+    # logger.addHandler(handler)
 
     main()
