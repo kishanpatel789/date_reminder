@@ -5,10 +5,12 @@ import os
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import json
+import io
+from urllib.parse import urlparse
 
 import pandas as pd
 from jinja2 import Environment, FileSystemLoader
-import boto3
+import boto3, botocore
 
 
 def generate_message(row):
@@ -26,18 +28,34 @@ def main():
     sender = os.environ["DR_SENDER"]
     recipient = os.environ["DR_RECIPIENT"]
     in_prod_env = bool(int(os.environ.get("DR_PROD", "0")))
+    if in_prod_env:
+        s3_file_path = os.environ["DR_S3_PATH"]
 
     # get current date
     today = datetime.today()
 
     # load data file
     if in_prod_env:
-        # TODO: download file from s3
-        pass
+        parsed_url = urlparse(s3_file_path)
+        bucket_name = parsed_url.netloc
+        object_key = parsed_url.path.lstrip("/")
+        logger.info(f"Attempting to use file '{object_key}' in bucket '{bucket_name}'")
+
+        try:
+            buffer = io.BytesIO()
+            s3 = boto3.client("s3")
+            s3.download_fileobj(bucket_name, object_key, buffer)
+            buffer.seek(0)
+        except botocore.exceptions.ClientError:
+            logger.error(f"Failed to download file '{object_key}'")
+            raise
+
+        data_source = buffer
     else:
-        data_path = Path(__file__).parents[1] / "data/dates.csv"
+        data_source = Path(__file__).parents[1] / "data/dates.csv"
+
     df = pd.read_csv(
-        data_path,
+        data_source,
         dtype={"display_name": pd.StringDtype(storage="pyarrow")},
         parse_dates=["date"],
     )
