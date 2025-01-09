@@ -84,6 +84,16 @@ def main(*args):
             today_events.append(row)
     today_events.sort(key=lambda x: (x["type"], x["date"]))
 
+    if len(today_events) == 0:
+        logger.info("No events today. Exiting.")
+
+        return {
+            "statusCode": 200,
+            "body": json.dumps(
+                "No events today. No email sent."
+            ),
+        }
+
     # generate email content
     env = Environment(
         loader=FileSystemLoader(Path(__file__).parent / "templates"),
