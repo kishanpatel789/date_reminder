@@ -1,5 +1,5 @@
 {% for row in reminders %}
-{{ row['person_id'] }} - {{ row['type'] | capitalize }}
+{{ row['person_id'] }} - {{ row['type'] | capitalize }} - {{ row['years'] }}
 {{ row['message'] }}
 
 {% endfor %}

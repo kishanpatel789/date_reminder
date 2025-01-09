@@ -6,7 +6,7 @@
     </head>
     <body>
         {% for row in reminders %}
-        <h1>{{ row['person_id'] }} - {{ row['type'] | capitalize }}</h1>
+        <h1>{{ row['person_id'] }} - {{ row['type'] | capitalize }} - {{ row['years'] }}</h1>
         <p>{{ row['message'] | replace ('\n', '<br>')}}</p><br>
         {% endfor %}
     </body>

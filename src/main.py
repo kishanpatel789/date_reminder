@@ -13,15 +13,6 @@ from jinja2 import Environment, FileSystemLoader
 import boto3, botocore
 
 
-def generate_message(row):
-    if row["display_name"] == "":
-        display_name = row["person_id"].split(".")[0]
-    else:
-        display_name = row["display_name"]
-
-    return f"Happy {row['type'].lower()}, {display_name}! \U0001f389 \nI hope you have a great day! \U0001f600"
-
-
 def get_logger(in_prod_env):
     if not in_prod_env:
         logger = logging.getLogger(__name__)
@@ -38,6 +29,19 @@ def get_logger(in_prod_env):
         logger.setLevel(logging.INFO)
 
     return logger
+
+
+def generate_message(row):
+    if row["display_name"] == "":
+        display_name = row["person_id"].split(".")[0].replace("+", " and ")
+    else:
+        display_name = row["display_name"]
+
+    return f"Happy {row['type'].lower()}, {display_name}! \U0001f389 \nI hope you have a great day! \U0001f600"
+
+
+def compute_years(row, current_year=datetime.today().year):
+    return current_year - row["date"].year
 
 
 def main(*args):
@@ -78,9 +82,15 @@ def main(*args):
     today_events = []  # list of dictionaries
     for row in reader:
         # capture today's events
-        row["date"] = datetime.strptime(row["date"], "%Y-%m-%d")
+        try:
+            row["date"] = datetime.strptime(row["date"], "%Y-%m-%d")
+        except ValueError as e:
+            logger.error(f"Failed to parse date '{row['date']}' for row: {row}")
+            logger.error(e)
+            continue
         if row["date"].month == today.month and row["date"].day == today.day:
             row["message"] = generate_message(row)
+            row["years"] = compute_years(row, today.year)
             today_events.append(row)
     today_events.sort(key=lambda x: (x["type"], x["date"]))
 
