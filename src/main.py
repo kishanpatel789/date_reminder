@@ -84,15 +84,16 @@ def main(*args):
             today_events.append(row)
     today_events.sort(key=lambda x: (x["type"], x["date"]))
 
-    if len(today_events) == 0:
+    num_events = len(today_events)
+    if num_events == 0:
         logger.info("No events today. Exiting.")
 
         return {
             "statusCode": 200,
-            "body": json.dumps(
-                "No events today. No email sent."
-            ),
+            "body": json.dumps("No events today. No email sent."),
         }
+    else:
+        logger.info(f"Found {num_events} events today.")
 
     # generate email content
     env = Environment(
@@ -141,14 +142,4 @@ def main(*args):
 
 
 if __name__ == "__main__":
-    # logger = logging.getLogger(__name__)
-    # logger.setLevel(logging.DEBUG)
-
-    # handler = logging.StreamHandler()
-    # formatter = logging.Formatter(
-    #     "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    # )
-    # handler.setFormatter(formatter)
-    # logger.addHandler(handler)
-
     main()
